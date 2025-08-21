@@ -1,0 +1,74 @@
+name: Build and Release VSIX
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build and Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20  # 使用 Node.js 20
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: Extension
+
+      - name: Compile Sources
+        run: yarn run compile
+        working-directory: Extension
+
+      - name: Run Linter
+        run: yarn run lint
+        working-directory: Extension
+
+      - name: Run unit tests
+        run: yarn test
+        working-directory: Extension
+
+      - name: Install VSCE
+        run: npm install -g @vscode/vsce  # 使用最新版本
+
+      - name: Package VSIX
+        run: vsce package --no-dependencies
+        working-directory: Extension
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-vsix
+          path: Extension/*.vsix
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: List artifacts
+        run: ls -R artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.vsix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
